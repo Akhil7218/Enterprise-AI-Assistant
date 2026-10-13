@@ -1,13 +1,15 @@
 from datetime import datetime, timedelta, timezone
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import HTTPBearer, OAuth2PasswordBearer
+from fastapi.security.http import HTTPAuthorizationCredentials
 from pwdlib import PasswordHash
 import jwt
 from jwt.exceptions import InvalidTokenError
 from pydantic import BaseModel
-from database import get_user_hash, user_exists, get_password_hash, get_user_data, get_user_role
+from database import get_user_hash, user_exists, get_password_hash, get_user_data, get_user_role, log_rag_request
 from fastapi.middleware.cors import CORSMiddleware
 from ragConnecter import rag_retrieve
+from guardrails import check_input, check_output
 import markdown
 
 
@@ -79,13 +81,59 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 @app.post("/user/query")
 async def user_query(payload: QueryPayload, current_emp_id: int = Depends(get_current_user)):
     user_role = get_user_role(current_emp_id)
-    html_rag_response = await rag_retrieve(payload.user_input,user_role)
-    rag_response = markdown.markdown(html_rag_response)
+    role_str = user_role[0] if user_role else "unknown"
+
+    input_check = check_input(payload.user_input)
+    if input_check["blocked"]:
+        log_rag_request(
+            emp_id=current_emp_id,
+            role=role_str,
+            query=payload.user_input,
+            response=input_check["reason"],
+            guardrail_blocked=True,
+        )
+        return {
+            "message": f"Query blocked by input guardrail for employee #{current_emp_id}",
+            "input_received": payload.user_input,
+            "rag_response": input_check["reason"],
+            "user_role": user_role,
+            "guardrail_blocked": True,
+        }
+
+    raw_response = await rag_retrieve(payload.user_input, user_role)
+
+    output_check = check_output(raw_response)
+    if output_check["blocked"]:
+        log_rag_request(
+            emp_id=current_emp_id,
+            role=role_str,
+            query=payload.user_input,
+            response=output_check["reason"],
+            guardrail_blocked=True,
+        )
+        return {
+            "message": f"Response blocked by output guardrail for employee #{current_emp_id}",
+            "input_received": payload.user_input,
+            "rag_response": output_check["reason"],
+            "user_role": user_role,
+            "guardrail_blocked": True,
+        }
+
+    rag_response = markdown.markdown(raw_response)
+    log_rag_request(
+        emp_id=current_emp_id,
+        role=role_str,
+        query=payload.user_input,
+        response=raw_response,
+        guardrail_blocked=False,
+    )
+
     return {
         "message": f"Processed query for employee #{current_emp_id}",
         "input_received": payload.user_input,
         "rag_response": rag_response,
-        "user_role": user_role
+        "user_role": user_role,
+        "guardrail_blocked": False,
     }
 
 @app.post("/login")

@@ -3,7 +3,7 @@ import sys
 from openai import OpenAI
 from embeddings import generate_embedding
 
-repo_path = "E:/Fall 26-27/enterprise-ai-assistant"
+repo_path = "E:/Fall 26-27/Enterprise-AI-Assistant-main"
 
 client = OpenAI(
     base_url="http://localhost:1234/v1",
@@ -101,7 +101,7 @@ Sources:
 
 If the context is insufficient:
 
-"I don't have sufficient authorised information to answer this question.""""},
+'I don't have sufficient authorised information to answer this question.'"""},
         {"role": "user", "content": f"""
     Context:
     {context}

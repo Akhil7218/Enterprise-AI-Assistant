@@ -1,5 +1,6 @@
 import sqlite3
 from pwdlib import PasswordHash
+from datetime import datetime, timezone
 
 
 
@@ -82,48 +83,46 @@ def get_user_data(id):
 
     res = cursor.fetchone()
     return res
-    
-
-#conn = sqlite3.connect("EmployeeDatabase.db")
-#cursor = conn.cursor()
-#cursor.execute("SELECT * FROM Employee;")
-#print(cursor.fetchall())
-
-#cursor.execute("""
-#CREATE TABLE Employee (
-#    empId int,
-#    name varchar(30),
-#    password varchar(60),
-#   role varchar(30));
-#""")
-
-#cursor.execute("""
-#NSERT INTO Employee 
-#Values
-#   (1,'Vishnu','Manid@159l','finance'),
-#    (2,'Akhil','asdfghjkl;','hr'),
-#    (3,'Prakash','nigger','engineer');
-#""")
-
-#cursor.execute("SELECT * FROM Employee")
-#print(cursor.fetchall())
-
-#add_user('Vishnu','Manid@159l','finance')
-#add_user('Akhil','asdfghjkl;','hr')
-#add_user('Prakash','nigger','engineer')
-#delete_user(5)
-#cursor.execute("SELECT * FROM Employee")
-#print(cursor.fetchall())
 
 
+def init_audit_log():
+    """Create the AuditLog table if it does not already exist."""
+    conn = sqlite3.connect("EmployeeDatabase.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS AuditLog (
+            log_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+            emp_id       INTEGER NOT NULL,
+            role         TEXT,
+            query        TEXT NOT NULL,
+            response     TEXT,
+            guardrail_blocked INTEGER DEFAULT 0,
+            timestamp    TEXT NOT NULL
+        );
+    """)
+    conn.commit()
+    conn.close()
 
-#view_table()
 
-#print(get_user_password_by_id(1))
+def log_rag_request(emp_id: int, role: str, query: str, response: str, guardrail_blocked: bool = False):
+    """Insert one audit record for a RAG query."""
+    conn = sqlite3.connect("EmployeeDatabase.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO AuditLog (emp_id, role, query, response, guardrail_blocked, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?);
+    """, (
+        emp_id,
+        role,
+        query,
+        response,
+        1 if guardrail_blocked else 0,
+        datetime.now(timezone.utc).isoformat(),
+    ))
+    conn.commit()
+    conn.close()
 
-#user = get_user_role("Vishnu","Manid@159l")
-#print(user)
+init_audit_log()
 
-#conn.commit()
-
-#conn.close()
+conn = sqlite3.connect("EmployeeDatabase.db")
+cursor = conn.cursor()
